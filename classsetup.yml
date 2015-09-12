@@ -1,0 +1,141 @@
+---
+- hosts: localhost
+  connection: local
+  gather_facts: False
+
+  tasks:
+    - name: Provision class workstation instance one
+      ec2:
+         key_name: rmorrison_keypair
+         group_id: sg-55b73131 
+         instance_type: t2.medium
+         image: "ami-5189a661"
+         vpc_subnet_id: subnet-ea02e6b3 
+         wait: true
+         exact_count: 3 
+         region: us-west-2
+         count_tag:
+            Name: ansible_class_dev
+         instance_tags:
+            Name: ansible_class_dev
+      register: ec2
+
+#    - name: Provision class workstation instance two 
+#      ec2:
+#         key_name: rmorrison_keypair
+#         group_id: sg-55b73131 
+#         instance_type: t2.medium
+#         image: "ami-5189a661"
+#         vpc_subnet_id: subnet-ea02e6b3 
+#         wait: true
+#         exact_count: 1
+#         region: us-west-2
+#         count_tag:
+#            Name: ansible_class_dev02
+#         instance_tags:
+#            Name: ansible_class_dev02
+#      register: ec2
+
+    - name: Add all instance public IPs to an inventory host group
+      add_host: hostname={{ item.public_ip }} groups=ec2hosts
+      with_items: ec2.instances
+
+    - name: Wait for the instances to boot by checking the ssh port
+      wait_for: host={{item.public_ip}} port=22 delay=180 timeout=320 state=started
+      with_items: ec2.instances
+
+- hosts: ec2hosts
+  name: automate all the things
+  user: ubuntu
+  sudo: yes
+  gather_facts: true
+
+  tasks:
+    - name: Configure sudoers file
+      lineinfile: "dest=/etc/sudoers regexp='^%sudo   ALL=(ALL:ALL) ALL' line=' %sudo ALL=(ALL) NOPASSWD: ALL' validate='visudo -cf %s'"
+
+    - name: Add Ryan's account
+      user: name=ryan group=sudo state=present shell=/bin/bash
+
+    - name: Add authorized_keys for Ryan's account
+      authorized_key: user=ryan key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCeW5DLMUG93s3OFUqpL+fcjLyk0UyIczusjLcT+WqDyBa81SNUbhmDeJ+SKVHrqJnAFmdCuzDsXtXGLX3+2UrH3KGXFXfpuAiS0XfPsaMvnIQE7i9Z+nGBsY2avuBxRwJnLoq/CM0KdxyksYMokAi2EJtFbr280TQsgryi/fjX5F8C6i4hFrEYxWyJDM7qtx7I6d1mdCJfTxrvYcipe10ZSxVkd1QU37nSbSy84mnb24QIAIMPl3eB8q5fsBNGikd+DaqK+GRJvSMCIE8zjM3h5+5aZGG4Tz6Y78UJvHCZf2PVhvJUihRL0JZXysrw8v2Txs5Ww5qzSsKXiYB5JpAY4A8Qd1tGS4PzFt6/tC2YwNth/ns651VVAIW2vzB7KHXWeb3H9F7BvEDeQ+UP29RgxPntf2/+9laa2Ci3wzzBL7DVIQRkfXbYfBGbiC211MVvCvsMNewiJZQzbFXe8CBEjMAvETB8zBYU3yz9D+oAIKRUavCi2KBfivEoo8ynElxbiPCJLcCLTOkWbhztfXidMidW2508ocE3I7fiVgEimmD7ajX06jJ79UsIey7WjcoAzSBjWaZicMqWE9t1/vVCchNTEY8qYImeqz3NaLAsq5Mhp1RBCE5j60I3l1/Lu3bjK1ZeQWeRejl5ua35FFQllY0N3DKHKw2c6dD1c4N7kw== rmorrison@taos.com"
+
+    - name: Add Jess's account
+      user: name=jess group=sudo state=present shell=/bin/bash
+
+    - name: fix host resolution
+      template: src=hosts.j2 dest=/etc/hosts owner=root group=root mode=0644
+
+    - name: add additional interfaces to eth0
+      copy: src=eth0.cfg dest=/etc/network/interfaces.d/eth0.cfg owner=root group=root mode=0644
+
+    - name: bounce network service
+      command: bash -c "ifdown eth0 && ifup eth0"
+
+    - name: install sshpass (for docker)
+      apt: name=sshpass
+
+    - name: copy an alternate sshd_config file to the server
+      template: src=sshd_config.j2 dest=/etc/ssh/sshd_config owner=root group=root mode=0644
+
+    - name: copy an alernate ssh_config file to the server
+      copy: src=ssh_config dest=/etc/ssh/ssh_config owner=root group=root mode=0644
+
+    - name: bounce ssh service
+      service: name=ssh state=restarted
+
+    - name: copy an alternate resolv.conf base file to the server
+      copy: src=base dest=/etc/resolvconf/resolv.conf.d/base owner=root group=root mode=0644
+
+    - name: reload resolv.conf
+      command: resolvconf -u
+
+    - name: install Docker 
+      apt: name=docker.io state=present
+
+    - name: enable and start Docker
+      service: name=docker.io state=started enabled=yes
+
+    - name: make the container folder
+      file: path=/home/ubuntu/class_instance state=directory mode=0755
+
+    - name: copy the class Docker file to the instance
+      copy: src=Dockerfile dest=/home/ubuntu/class_instance/Dockerfile owner=root group=root mode=0644
+
+    - name: copy the supervisord config file to the instance
+      copy: src=supervisord.conf dest=/home/ubuntu/class_instance/supervisord.conf owner=root group=root mode=0644
+
+    - name: build class container
+      command: docker build -t ansibleclass/class_instance /home/ubuntu/class_instance/. 
+
+    - name: create class container one
+      command: docker run -p 172.31.22.101:22:22 -p 172.31.22.101:80:80 -t --name webapp01 -d ansibleclass/class_instance
+
+    - name: create class container two
+      command: docker run -p 172.31.22.102:22:22 -p 172.31.22.102:80:80 -t --name webapp02 -d ansibleclass/class_instance
+
+    - name: create class container three
+      command: docker run -p 172.31.22.103:22:22 -p 172.31.22.103:80:80 -t --name webapp03 -d ansibleclass/class_instance
+
+    - name: create class container four
+      command: docker run -p 172.31.22.201:22:22 -p 172.31.22.201:80:80 -t --name testapp01 -d ansibleclass/class_instance
+
+    - name: create class container five
+      command: docker run -p 172.31.22.202:22:22 -p 172.31.22.202:80:80 -t --name testapp02 -d ansibleclass/class_instance
+
+    - name: create class container six 
+      command: docker run -p 172.31.22.203:22:22 -p 172.31.22.203:80:80 -t --name testapp03 -d ansibleclass/class_instance
+ 
+    - name: update apt
+      apt: update_cache=yes
+
+    - name: install the python pip package 
+      apt: name=python-pip state=present
+
+    - name: install the pip installer
+      command: easy_install pip
+
+    - name: install the docker-py that works with Ansible
+      command: pip install docker-py==1.2.3
+
+

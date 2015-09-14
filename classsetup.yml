@@ -90,12 +90,6 @@
     - name: reload resolv.conf
       command: resolvconf -u
 
-    - name: install Docker 
-      apt: name=docker.io state=present
-
-    - name: enable and start Docker
-      service: name=docker.io state=started enabled=yes
-
     - name: make the container folder
       file: path=/home/ubuntu/class_instance state=directory mode=0755
 
@@ -105,26 +99,47 @@
     - name: copy the supervisord config file to the instance
       copy: src=supervisord.conf dest=/home/ubuntu/class_instance/supervisord.conf owner=root group=root mode=0644
 
-    - name: build class container
-      command: docker build -t ansibleclass/class_instance /home/ubuntu/class_instance/. 
+    - name: copy the install script to the instance
+      copy: src=install_docker.bash dest=/home/ubuntu/install_docker.bash owner=ubuntu group=ubuntu mode=0744
 
-    - name: create class container one
-      command: docker run -p 172.31.22.101:22:22 -p 172.31.22.101:80:80 -t --name webapp01 -d ansibleclass/class_instance
+#    - name: install Docker from ubuntu
+#      apt: name=docker.io state=present
 
-    - name: create class container two
-      command: docker run -p 172.31.22.102:22:22 -p 172.31.22.102:80:80 -t --name webapp02 -d ansibleclass/class_instance
+#    - name: install Docker from Docker
+#      command: curl -sSL https://get.docker.com/ | sh
 
-    - name: create class container three
-      command: docker run -p 172.31.22.103:22:22 -p 172.31.22.103:80:80 -t --name webapp03 -d ansibleclass/class_instance
+#    - name: enable and start Docker
+#      service: name=docker.io state=started enabled=yes
 
-    - name: create class container four
-      command: docker run -p 172.31.22.201:22:22 -p 172.31.22.201:80:80 -t --name testapp01 -d ansibleclass/class_instance
+#    - name: enable and start Docker
+#      service: name=docker.io state=started enabled=yes
 
-    - name: create class container five
-      command: docker run -p 172.31.22.202:22:22 -p 172.31.22.202:80:80 -t --name testapp02 -d ansibleclass/class_instance
+    - name: install Docker from Docker
+      command: /home/ubuntu/install_docker.bash 
 
-    - name: create class container six 
-      command: docker run -p 172.31.22.203:22:22 -p 172.31.22.203:80:80 -t --name testapp03 -d ansibleclass/class_instance
+    - name: enable and start Docker
+      service: name=docker state=started enabled=yes
+
+#    - name: build class container
+#      command: docker build -t ansibleclass/class_instance /home/ubuntu/class_instance/. 
+
+#    - name: create class container one
+#      command: docker run -p 172.31.22.101:22:22 -p 172.31.22.101:80:80 -t --name webapp01 -d ansibleclass/class_instance
+
+#    - name: create class container two
+#      command: docker run -p 172.31.22.102:22:22 -p 172.31.22.102:80:80 -t --name webapp02 -d ansibleclass/class_instance
+
+#    - name: create class container three
+#      command: docker run -p 172.31.22.103:22:22 -p 172.31.22.103:80:80 -t --name webapp03 -d ansibleclass/class_instance
+
+#    - name: create class container four
+#      command: docker run -p 172.31.22.201:22:22 -p 172.31.22.201:80:80 -t --name testapp01 -d ansibleclass/class_instance
+
+#    - name: create class container five
+#      command: docker run -p 172.31.22.202:22:22 -p 172.31.22.202:80:80 -t --name testapp02 -d ansibleclass/class_instance
+
+#    - name: create class container six 
+#      command: docker run -p 172.31.22.203:22:22 -p 172.31.22.203:80:80 -t --name testapp03 -d ansibleclass/class_instance
  
     - name: update apt
       apt: update_cache=yes

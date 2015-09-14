@@ -12,6 +12,7 @@ RUN apt-get update
 #Ensure it is available from within this
 #container
 RUN apt-get install -y python-simplejson
+RUN apt-get install -y python-apt 
 
 #Install/Configure OpenSSH
 RUN apt-get install -y openssh-server

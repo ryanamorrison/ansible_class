@@ -1,0 +1,18 @@
+#!/bin/sh
+
+addr=`ip -o -4 address show eth0 up | sed -e 's/.*inet //' -e 's/\/.*//'`
+perl -pi -e "s/#ListenAddress 0.0.0.0/ListenAddress $addr/" /etc/ssh/sshd_config
+perl -pi -e "s/#   StrictHostKeyChecking ask/    StrictHostKeyChecking no/" /etc/ssh/ssh_config
+service ssh restart
+
+while read line
+do
+    grep "$line" /etc/hosts >/dev/null || echo "$line" >> /etc/hosts
+done <<EOF
+172.31.22.101 webapp01
+172.31.22.102 webapp02
+172.31.22.103 webapp03
+172.31.22.201 testapp01
+172.31.22.202 testapp02
+172.31.22.203 testapp03
+EOF
